@@ -1,0 +1,66 @@
+name: Build static shred for Android
+
+on:
+  workflow_dispatch:          # 手动触发
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        abi: [armeabi-v7a, arm64-v8a, x86, x86_64]
+
+    steps:
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake autopoint bison gettext gperf libtool texinfo
+
+      - name: Clone coreutils
+        run: git clone --depth=1 https://github.com/coreutils/coreutils.git $GITHUB_WORKSPACE/coreutils
+
+      - name: Setup NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r26c
+          add-to-path: true
+
+      - name: Generate configure
+        working-directory: coreutils
+        run: ./bootstrap
+
+      - name: Cross-compile static shred
+        working-directory: coreutils
+        env:
+          NDK: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ABI: ${{ matrix.abi }}
+        run: |
+          case $ABI in
+            armeabi-v7a) TARGET=arm-linux-androideabi     API=21 ;;
+            arm64-v8a)   TARGET=aarch64-linux-android     API=21 ;;
+            x86)         TARGET=i686-linux-android        API=21 ;;
+            x86_64)      TARGET=x86_64-linux-android      API=21 ;;
+          esac
+          TOOLCHAIN=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin
+          export CC=$TOOLCHAIN/${TARGET}${API}-clang
+          export AR=$TOOLCHAIN/llvm-ar
+          export RANLIB=$TOOLCHAIN/llvm-ranlib
+          export STRIP=$TOOLCHAIN/llvm-strip
+          export CFLAGS="-static -Oz"
+          ./configure --host=$TARGET --disable-nls --disable-rpath --enable-single-binary=shred
+          make -j$(nproc)
+
+      - name: Strip & rename
+        working-directory: coreutils/src
+        run: |
+          ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip shred
+          mv shred shred-${{ matrix.abi }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: shred-android-${{ matrix.abi }}
+          path: coreutils/src/shred-${{ matrix.abi }}
