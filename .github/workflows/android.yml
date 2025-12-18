@@ -15,7 +15,7 @@ jobs:
     steps:
       - name: Instdepsdeps
         run: |
-          sapt-get-get update
+          sudo apt-get update
           sudo apt-get install -y autoconf automake autopoint bison gettext gperf libtool texinfo
 
       - name: Clone coreutils
