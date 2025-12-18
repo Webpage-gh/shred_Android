@@ -1,4 +1,4 @@
-name: Build static shred for Android
+name: Build static shred for Android (64-bit only)
 
 on:
   workflow_dispatch:
@@ -32,26 +32,28 @@ jobs:
         working-directory: coreutils
         run: ./bootstrap
 
-      - name: Configure & build static shred only
+      - name: Configure & build static shred
         working-directory: coreutils
         env:
           NDK: ${{ steps.setup-ndk.outputs.ndk-path }}
           ABI: ${{ matrix.abi }}
         run: |
           case $ABI in
-            armeabi-v7a) TARGET=arm-linux-androideabi     API=21 ;;
-            arm64-v8a)   TARGET=aarch64-linux-android     API=21 ;;
-            x86)         TARGET=i686-linux-android        API=21 ;;
-            x86_64)      TARGET=x86_64-linux-android      API=21 ;;
+            arm64-v8a) TARGET=aarch64-linux-android; API=21 ;;
+            x86_64)    TARGET=x86_64-linux-android;  API=21 ;;
           esac
           TC=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin
           export CC=$TC/${TARGET}${API}-clang
           export AR=$TC/llvm-ar
           export RANLIB=$TC/llvm-ranlib
           export STRIP=$TC/llvm-strip
-          export CFLAGS="-static -Oz"
-          ./configure --host=$TARGET --disable-nls --disable-rpath --without-libcap
-          # 只编译 src/shred 及其依赖
+          # 关键：用 GNU11 + 静态链接 + 关掉 capabilities
+          export CFLAGS="-std=gnu11 -static -Oz"
+          ./configure --host=$TARGET \
+                      --disable-nls \
+                      --disable-rpath \
+                      --disable-libcap
+          # 只编 shred
           make -j$(nproc) src/shred
 
       - name: Strip & rename
