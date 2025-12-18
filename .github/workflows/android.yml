@@ -1,7 +1,7 @@
 name: Build static shred for Android
 
 on:
-  workflow_dispatch:          # 手动触发
+  workflow_dispatch:
   push:
     branches: [ main, master ]
 
@@ -13,7 +13,7 @@ jobs:
         abi: [arm64-v8a, x86_64]
 
     steps:
-      - name: Instdepsdeps
+      - name: Install deps
         run: |
           sudo apt-get update
           sudo apt-get install -y autoconf automake autopoint bison gettext gperf libtool texinfo
@@ -28,11 +28,11 @@ jobs:
           ndk-version: r26c
           add-to-path: true
 
-      - name: Generate configure
+      - name: Bootstrap
         working-directory: coreutils
         run: ./bootstrap
 
-      - name: Cross-compile static shred
+      - name: Configure & build static shred only
         working-directory: coreutils
         env:
           NDK: ${{ steps.setup-ndk.outputs.ndk-path }}
@@ -44,14 +44,15 @@ jobs:
             x86)         TARGET=i686-linux-android        API=21 ;;
             x86_64)      TARGET=x86_64-linux-android      API=21 ;;
           esac
-          TOOLCHAIN=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin
-          export CC=$TOOLCHAIN/${TARGET}${API}-clang
-          export AR=$TOOLCHAIN/llvm-ar
-          export RANLIB=$TOOLCHAIN/llvm-ranlib
-          export STRIP=$TOOLCHAIN/llvm-strip
+          TC=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin
+          export CC=$TC/${TARGET}${API}-clang
+          export AR=$TC/llvm-ar
+          export RANLIB=$TC/llvm-ranlib
+          export STRIP=$TC/llvm-strip
           export CFLAGS="-static -Oz"
-          ./configure --host=$TARGET --disable-nls --disable-rpath --enable-single-binary=shred
-          make -j$(nproc)
+          ./configure --host=$TARGET --disable-nls --disable-rpath --without-libcap
+          # 只编译 src/shred 及其依赖
+          make -j$(nproc) src/shred
 
       - name: Strip & rename
         working-directory: coreutils/src
