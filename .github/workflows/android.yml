@@ -1,4 +1,4 @@
-name: Build static shred for Android (64-bit only)
+name: Build static shred for Android (64-bit, coreutils 9.4)
 
 on:
   workflow_dispatch:
@@ -18,8 +18,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y autoconf automake autopoint bison gettext gperf libtool texinfo
 
-      - name: Clone coreutils
-        run: git clone --depth=1 https://github.com/coreutils/coreutils.git $GITHUB_WORKSPACE/coreutils
+      - name: Clone coreutils 9.4 (C99 兼容)
+        run: |
+          git clone --depth=1 --branch=v9.4 https://github.com/coreutils/coreutils.git $GITHUB_WORKSPACE/coreutils
 
       - name: Setup NDK
         uses: nttld/setup-ndk@v1
@@ -28,11 +29,7 @@ jobs:
           ndk-version: r26c
           add-to-path: true
 
-      - name: Bootstrap
-        working-directory: coreutils
-        run: ./bootstrap
-
-      - name: Configure & build static shred
+      - name: Configure & build
         working-directory: coreutils
         env:
           NDK: ${{ steps.setup-ndk.outputs.ndk-path }}
@@ -47,13 +44,8 @@ jobs:
           export AR=$TC/llvm-ar
           export RANLIB=$TC/llvm-ranlib
           export STRIP=$TC/llvm-strip
-          # 关键：用 GNU11 + 静态链接 + 关掉 capabilities
-          export CFLAGS="-std=gnu11 -static -Oz"
-          ./configure --host=$TARGET \
-                      --disable-nls \
-                      --disable-rpath \
-                      --disable-libcap
-          # 只编 shred
+          export CFLAGS="-std=c99 -static -Oz"
+          ./configure --host=$TARGET --disable-nls --disable-rpath --disable-libcap
           make -j$(nproc) src/shred
 
       - name: Strip & rename
